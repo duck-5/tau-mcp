@@ -17,7 +17,7 @@ services:
       - path: .env
         required: false
     environment:
-      - PORT=8001
+      - PORT=8000
       - HOST=0.0.0.0
       - PYTHONUNBUFFERED=1
     volumes:
@@ -25,7 +25,10 @@ services:
       - ../moodle-mcp:/app/moodle-mcp:ro
       - /home/mantin-server/.moodle_mcp:/root/.moodle_mcp:ro
     networks:
-      - mcp-gateway-net
+      mcp-gateway-net:
+        aliases:
+          - moodle-mcp
+          - tau-mcp
     logging: *default-logging
 
 networks:

@@ -229,12 +229,12 @@ def create_server(profile: Optional[str] = None, include_moodle: bool = True) ->
     return server, portal, catalog, room_finder
 
 
-def run_streamable_http_server(server: Any, host: str = "0.0.0.0", port: int = 8001) -> None:
-    """Runs tau-mcp with Starlette Streamable HTTP transport and /health endpoint."""
+def run_streamable_http_server(server: Any, host: str = "0.0.0.0", port: int = 8000) -> None:
+    """Runs tau-mcp with Starlette Streamable HTTP transport, OAuth 2.1 support, and /health endpoint."""
     import uvicorn
     import anyio
     from starlette.applications import Starlette
-    from starlette.responses import JSONResponse
+    from starlette.responses import JSONResponse, RedirectResponse
     from starlette.routing import Route, Mount
     from starlette.middleware.cors import CORSMiddleware
     from contextlib import AsyncExitStack, asynccontextmanager
@@ -259,10 +259,10 @@ def run_streamable_http_server(server: Any, host: str = "0.0.0.0", port: int = 8
 
     async def root_info(req: Any) -> JSONResponse:
         return JSONResponse({
-            "service": "tau-mcp",
+            "service": "tau-mcp-unified",
             "transport": "streamable-http",
             "status": "online",
-            "endpoints": {"mcp": "/mcp", "health": "/health"}
+            "endpoints": {"mcp": "/mcp", "health": "/health", "authorize": "/authorize"}
         })
 
     custom_routes = [
@@ -278,12 +278,28 @@ def run_streamable_http_server(server: Any, host: str = "0.0.0.0", port: int = 8
     )
 
     async def health(req: Any) -> JSONResponse:
-        return JSONResponse({"status": "ok", "service": "tau-mcp", "transport": "streamable-http"})
+        return JSONResponse({
+            "status": "ok",
+            "service": "tau-mcp-unified",
+            "transport": "streamable-http"
+        })
 
     routes = [
         Route("/health", health, methods=["GET"]),
-        Mount("/", mcp_app)
     ]
+
+    # Mount OAuth 2.1 endpoints if moodle_mcp is available
+    token_manager = None
+    try:
+        from moodle_mcp.oauth import TokenManager, create_oauth_routes, BearerAuthMiddleware
+        token_manager = TokenManager()
+        for r in create_oauth_routes(token_manager):
+            routes.append(r)
+        logger.info("Mounted OAuth 2.1 metadata, authorize, and token routes.")
+    except Exception as e:
+        logger.debug(f"OAuth 2.1 routes not mounted: {e}")
+
+    routes.append(Mount("/", mcp_app))
 
     session_mgr = getattr(server._lowlevel_server, "_session_manager", None)
 
@@ -295,16 +311,24 @@ def run_streamable_http_server(server: Any, host: str = "0.0.0.0", port: int = 8
             yield
 
     app = Starlette(routes=routes, lifespan=lifespan)
+    if token_manager:
+        require_auth = os.getenv("TAU_REQUIRE_AUTH", os.getenv("MOODLE_REQUIRE_AUTH", "0")) in ("1", "true", "True")
+        app.add_middleware(
+            BearerAuthMiddleware,
+            token_manager=token_manager,
+            require_auth=require_auth
+        )
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
-        expose_headers=["mcp-session-id", "authorization"],
+        expose_headers=["mcp-session-id", "www-authenticate", "authorization"],
     )
 
-    print(f"🚀 Starting TAU MCP Server on http://{host}:{port}")
+    print(f"🚀 Starting Unified TAU MCP Server on http://{host}:{port}")
     print(f"   Streamable HTTP Endpoint: http://{host}:{port}/mcp (or root /)")
     print(f"   Health Check: http://{host}:{port}/health")
 
@@ -321,7 +345,7 @@ def main():
         default="stdio",
         help="MCP transport protocol (default: stdio)"
     )
-    parser.add_argument("--port", type=int, default=8001, help="Port for SSE/HTTP (default: 8001)")
+    parser.add_argument("--port", type=int, default=8000, help="Port for SSE/HTTP (default: 8000)")
     parser.add_argument("--host", default="0.0.0.0", help="Host for SSE/HTTP (default: 0.0.0.0)")
     parser.add_argument("--profile", default=None, help="User profile name for isolated session storage")
     parser.add_argument("--no-moodle", action="store_true", help="Disable dynamic Moodle integration")

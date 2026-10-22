@@ -23,13 +23,13 @@ COPY . /app/
 # Install package in editable mode
 RUN pip install --no-cache-dir -e .
 
-EXPOSE 8001
+EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD curl -f http://localhost:8001/health || exit 1
+  CMD curl -f http://localhost:8000/health || exit 1
 
 ENV PYTHONUNBUFFERED=1 \
-    PORT=8001 \
+    PORT=8000 \
     HOST=0.0.0.0
 
-CMD ["python", "-m", "tau_mcp", "--transport", "streamable-http", "--host", "0.0.0.0", "--port", "8001"]
+CMD ["python", "-m", "tau_mcp", "--transport", "streamable-http", "--host", "0.0.0.0", "--port", "8000"]
