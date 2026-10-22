@@ -7,8 +7,8 @@ def register_schedule_tools(server: Any, portal: TAUPortalClient) -> None:
     @server.tool(
         name="tau_get_my_schedule",
         description=(
-            "Get the authenticated student's enrolled schedule and upcoming classes with classroom room numbers, "
-            "building names, lecturers, and campus map GPS coordinates."
+            "Get the student's enrolled weekly class schedule with physical classrooms, buildings, lecturer names, "
+            "and campus map GPS coordinates from the TAU Student Portal. For homework deadlines and submission due dates, use Moodle tools."
         )
     )
     def tau_get_my_schedule(from_date: Optional[str] = None) -> List[Dict[str, Any]]:

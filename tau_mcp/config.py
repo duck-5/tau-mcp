@@ -15,8 +15,11 @@ _candidates = [
     Path(".env"),
     _pkg_root / ".env",
     _pkg_root.parent / ".env",
+    Path("../moodle-mcp/.env"),
     Path("../moodle_mcp/.env"),
+    _pkg_root.parent.parent / "moodle-mcp" / ".env",
     _pkg_root.parent.parent / "moodle_mcp" / ".env",
+    _pkg_root / "plugins" / "moodle" / "moodle-mcp" / ".env",
 ]
 
 for env_path in _candidates:
@@ -49,6 +52,14 @@ def get_env_or_dotenv(key: str, fallback_keys: Optional[list] = None, default: s
 TAU_USERNAME = get_env_or_dotenv("TAU_USERNAME", ["MOODLE_USERNAME", "USERNAME"])
 TAU_ID = get_env_or_dotenv("TAU_ID", ["MOODLE_STUDENT_ID", "ID", "STUDENT_ID"])
 TAU_PASSWORD = get_env_or_dotenv("TAU_PASSWORD", ["MOODLE_PASSWORD", "PASSWORD"])
+
+# Propagate credentials to os.environ so moodle_mcp sub-components inherit them
+if TAU_USERNAME and not os.environ.get("MOODLE_USERNAME"):
+    os.environ["MOODLE_USERNAME"] = TAU_USERNAME
+if TAU_PASSWORD and not os.environ.get("MOODLE_PASSWORD"):
+    os.environ["MOODLE_PASSWORD"] = TAU_PASSWORD
+if TAU_ID and not os.environ.get("MOODLE_STUDENT_ID"):
+    os.environ["MOODLE_STUDENT_ID"] = TAU_ID
 
 # Portals & Catalog URLs
 PORTAL_URL = os.getenv("TAU_PORTAL_URL", "https://my.tau.ac.il/TAU_Student/").rstrip("/")

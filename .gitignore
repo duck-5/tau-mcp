@@ -40,6 +40,7 @@ ENV/
 temp/
 debug_output/
 *.log
+data/
 
 # IDE and Editor files
 .vscode/

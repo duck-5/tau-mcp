@@ -6,7 +6,7 @@ from tau_mcp.core.portal import TAUPortalClient
 def register_academic_tools(server: Any, portal: TAUPortalClient) -> None:
     @server.tool(
         name="tau_get_my_grades",
-        description="Get the authenticated student's full course grade records across all semesters, with credit weights, passing status, and notes."
+        description="Get the student's OFFICIAL university transcripts, semester grades, Moed A/B final grades, and credit points from the central TAU Student Portal (my.tau.ac.il). For active in-course assignment or quiz grades inside courses, use Moodle tools."
     )
     def tau_get_my_grades() -> List[Dict[str, Any]]:
         grades = portal.get_grades()

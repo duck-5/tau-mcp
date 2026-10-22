@@ -6,7 +6,7 @@ from tau_mcp.core.portal import TAUPortalClient
 def register_message_tools(server: Any, portal: TAUPortalClient) -> None:
     @server.tool(
         name="tau_get_my_messages",
-        description="Get the authenticated student's portal messages, alerts, and course room change announcements."
+        description="Get personal notifications, administrative messages, and active classroom change alerts sent by university administration via the TAU Student Portal. For course-specific forum announcements, use Moodle tools."
     )
     def tau_get_my_messages(include_earlier: bool = True) -> List[Dict[str, Any]]:
         """

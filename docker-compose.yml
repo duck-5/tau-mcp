@@ -1,0 +1,33 @@
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  tau-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tau-mcp
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - PORT=8001
+      - HOST=0.0.0.0
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./data:/root/.tau_mcp
+      - ../moodle-mcp:/app/moodle-mcp:ro
+      - /home/mantin-server/.moodle_mcp:/root/.moodle_mcp:ro
+    networks:
+      - mcp-gateway-net
+    logging: *default-logging
+
+networks:
+  mcp-gateway-net:
+    external: true

@@ -228,6 +228,91 @@ def create_server(profile: Optional[str] = None, include_moodle: bool = True) ->
 
     return server, portal, catalog, room_finder
 
+
+def run_streamable_http_server(server: Any, host: str = "0.0.0.0", port: int = 8001) -> None:
+    """Runs tau-mcp with Starlette Streamable HTTP transport and /health endpoint."""
+    import uvicorn
+    import anyio
+    from starlette.applications import Starlette
+    from starlette.responses import JSONResponse
+    from starlette.routing import Route, Mount
+    from starlette.middleware.cors import CORSMiddleware
+    from contextlib import AsyncExitStack, asynccontextmanager
+
+    try:
+        from mcp.server.streamable_http import TransportSecuritySettings, StreamableHTTPASGIApp
+    except ImportError:
+        try:
+            from mcp.server.fastmcp.streamable_http import TransportSecuritySettings, StreamableHTTPASGIApp
+        except ImportError:
+            TransportSecuritySettings = None
+            StreamableHTTPASGIApp = None
+
+    security = None
+    if TransportSecuritySettings:
+        security = TransportSecuritySettings(
+            allowed_origins=["*"],
+            allowed_hosts=["*"],
+            require_session_id=False,
+            enable_csrf_protection=False
+        )
+
+    async def root_info(req: Any) -> JSONResponse:
+        return JSONResponse({
+            "service": "tau-mcp",
+            "transport": "streamable-http",
+            "status": "online",
+            "endpoints": {"mcp": "/mcp", "health": "/health"}
+        })
+
+    custom_routes = [
+        Route("/mcp", endpoint=root_info, methods=["GET", "HEAD"]),
+        Route("/", endpoint=root_info, methods=["GET", "HEAD"]),
+    ]
+
+    mcp_app = server._lowlevel_server.streamable_http_app(
+        streamable_http_path="/mcp",
+        host=host,
+        transport_security=security,
+        custom_starlette_routes=custom_routes,
+    )
+
+    async def health(req: Any) -> JSONResponse:
+        return JSONResponse({"status": "ok", "service": "tau-mcp", "transport": "streamable-http"})
+
+    routes = [
+        Route("/health", health, methods=["GET"]),
+        Mount("/", mcp_app)
+    ]
+
+    session_mgr = getattr(server._lowlevel_server, "_session_manager", None)
+
+    @asynccontextmanager
+    async def lifespan(app: Starlette):
+        async with AsyncExitStack() as stack:
+            if session_mgr:
+                await stack.enter_async_context(session_mgr.run())
+            yield
+
+    app = Starlette(routes=routes, lifespan=lifespan)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=["mcp-session-id", "authorization"],
+    )
+
+    print(f"🚀 Starting TAU MCP Server on http://{host}:{port}")
+    print(f"   Streamable HTTP Endpoint: http://{host}:{port}/mcp (or root /)")
+    print(f"   Health Check: http://{host}:{port}/health")
+
+    config_uv = uvicorn.Config(app, host=host, port=port, log_level="info")
+    uv_server = uvicorn.Server(config_uv)
+    anyio.run(uv_server.serve)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Tel Aviv University (TAU) MCP Server")
     parser.add_argument(
@@ -267,6 +352,9 @@ def main():
         # Direct all logging to stderr so stdout is purely for MCP JSON-RPC protocol
         logging.basicConfig(level=logging.INFO, stream=sys.stderr)
         server.run(transport="stdio")
+    elif args.transport == "streamable-http":
+        logging.basicConfig(level=logging.INFO)
+        run_streamable_http_server(server, host=args.host, port=args.port)
     else:
         logging.basicConfig(level=logging.INFO)
         server.run(transport="sse", host=args.host, port=args.port)
