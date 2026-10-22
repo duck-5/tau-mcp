@@ -79,9 +79,9 @@ class TAUAuthManager:
             with open(self.session_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
 
-            # Session valid for up to 30 minutes
+            # Session valid for up to 4 hours (self-healing auto-refresh re-authenticates if OutSystems rejects earlier)
             cached_time = data.get("timestamp", 0)
-            if time.time() - cached_time > 1800:
+            if time.time() - cached_time > 14400:
                 logger.debug("Portal session cache expired.")
                 return False
 

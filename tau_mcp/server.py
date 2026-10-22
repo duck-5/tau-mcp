@@ -134,12 +134,15 @@ def create_server(profile: Optional[str] = None, include_moodle: bool = True) ->
         name=f"tau_mcp_{prof_name}" if prof_name != "default" else "tau_mcp"
     )
 
-    # Automatically annotate tools with MCP read_only_hint / idempotent_hint
+    # Automatically annotate tools with MCP read_only_hint / idempotent_hint and wrap exceptions
     orig_add_tool = getattr(server, "add_tool", None)
     if callable(orig_add_tool):
+        import functools
+        import inspect
+
         def add_tool_with_annotations(fn: Any, *args: Any, **kwargs: Any) -> Any:
+            fn_name = kwargs.get("name") or getattr(fn, "__name__", "")
             if kwargs.get("annotations") is None:
-                fn_name = kwargs.get("name") or getattr(fn, "__name__", "")
                 read_only_prefixes = ("tau_get_", "tau_search_", "moodle_get_", "moodle_search_", "moodle_read_", "moodle_list_")
                 destructive_prefixes = ("moodle_delete_", "moodle_clear_", "tau_clear_")
                 try:
@@ -152,7 +155,35 @@ def create_server(profile: Optional[str] = None, include_moodle: bool = True) ->
                         kwargs["annotations"] = ToolAnnotations(read_only_hint=False, destructive_hint=False)
                 except Exception:
                     pass
-            return orig_add_tool(fn, *args, **kwargs)
+
+            # Wrap fn to guarantee tool exceptions never crash the SSE stream / connection
+            ret_ann = getattr(fn, "__annotations__", {}).get("return", None)
+
+            def make_error_payload(exc: Exception) -> Any:
+                err_text = f"Error in {fn_name}: {exc}"
+                logger.error(err_text)
+                if ret_ann is not None and (ret_ann is dict or "Dict" in str(ret_ann)):
+                    return {"error": err_text, "tool": fn_name}
+                elif ret_ann is not None and (ret_ann is str or "str" in str(ret_ann)):
+                    return err_text
+                return [{"error": err_text, "tool": fn_name}]
+
+            if inspect.iscoroutinefunction(fn):
+                @functools.wraps(fn)
+                async def safe_fn(*a: Any, **kw: Any) -> Any:
+                    try:
+                        return await fn(*a, **kw)
+                    except Exception as e:
+                        return make_error_payload(e)
+            else:
+                @functools.wraps(fn)
+                def safe_fn(*a: Any, **kw: Any) -> Any:
+                    try:
+                        return fn(*a, **kw)
+                    except Exception as e:
+                        return make_error_payload(e)
+
+            return orig_add_tool(safe_fn, *args, **kwargs)
 
         server.add_tool = add_tool_with_annotations
 

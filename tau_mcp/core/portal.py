@@ -70,9 +70,30 @@ class TAUPortalClient:
 
         resp = self.session.post(url, headers=headers, cookies=self.cookies, json=payload, timeout=20)
 
+        def _needs_reauth(response: requests.Response) -> bool:
+            if response.status_code in (401, 403):
+                return True
+            if response.status_code == 200:
+                if "Invalid Login" in response.text:
+                    return True
+                try:
+                    rj = response.json()
+                    if "exception" in rj and rj["exception"]:
+                        exc = rj["exception"]
+                        exc_str = (
+                            str(exc.get("name", "")) + " " +
+                            str(exc.get("message", "")) + " " +
+                            str(exc.get("specificType", ""))
+                        ).lower()
+                        if any(k in exc_str for k in ("impersonate", "registered", "security", "invalid login", "notregistered", "unauthorized", "login", "role required")):
+                            return True
+                except Exception:
+                    pass
+            return False
+
         # Handle expired session
-        if resp.status_code in (401, 403) or (resp.status_code == 200 and "Invalid Login" in resp.text):
-            logger.info("Portal session expired. Re-authenticating...")
+        if _needs_reauth(resp):
+            logger.info("Portal session expired or unauthorized. Re-authenticating...")
             self._load_session(force_refresh=True)
             headers["x-csrftoken"] = self.csrf_token
             resp = self.session.post(url, headers=headers, cookies=self.cookies, json=payload, timeout=20)
