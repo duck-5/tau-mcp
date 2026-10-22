@@ -1,0 +1,54 @@
+# Environment variables and secrets
+.env
+*.env
+*.env.local
+
+# Session caches and tokens
+.tau_session.json
+*.session.json
+.session*
+
+# Python bytecode and build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# Scratch & temporary test files
+temp/
+debug_output/
+*.log
+
+# IDE and Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Ignore actual Moodle submodule/clone if placed inside plugins directory,
+# but keep the bridge file plugin.py
+tau_mcp/plugins/moodle/*
+!tau_mcp/plugins/moodle/plugin.py
