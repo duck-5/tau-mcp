@@ -134,6 +134,20 @@ def create_server(profile: Optional[str] = None, include_moodle: bool = True) ->
         name=f"tau_mcp_{prof_name}" if prof_name != "default" else "tau_mcp"
     )
 
+    # Advertise list_changed=True in capabilities so clients (e.g. Gemini) can refresh tool lists
+    if hasattr(server, "_lowlevel_server") and hasattr(server._lowlevel_server, "get_capabilities"):
+        orig_get_caps = server._lowlevel_server.get_capabilities
+        def patched_get_capabilities(*args: Any, **kwargs: Any) -> Any:
+            caps = orig_get_caps(*args, **kwargs)
+            if hasattr(caps, "tools") and caps.tools:
+                caps.tools.list_changed = True
+            if hasattr(caps, "resources") and caps.resources:
+                caps.resources.list_changed = True
+            if hasattr(caps, "prompts") and caps.prompts:
+                caps.prompts.list_changed = True
+            return caps
+        server._lowlevel_server.get_capabilities = patched_get_capabilities
+
     # Automatically annotate tools with MCP read_only_hint / idempotent_hint and wrap exceptions
     orig_add_tool = getattr(server, "add_tool", None)
     if callable(orig_add_tool):
