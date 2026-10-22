@@ -23,7 +23,7 @@ services:
     volumes:
       - ./data:/root/.tau_mcp
       - ../moodle-mcp:/app/moodle-mcp:ro
-      - /home/mantin-server/.moodle_mcp:/root/.moodle_mcp:ro
+      - /home/mantin-server/.moodle_mcp:/root/.moodle_mcp
     networks:
       mcp-gateway-net:
         aliases:

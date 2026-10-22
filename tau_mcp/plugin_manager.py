@@ -139,6 +139,7 @@ class PluginManager:
             from moodle_mcp.client import MoodleClient
             from moodle_mcp.panopto import PanoptoManager
             from moodle_mcp.tools import register_all_tools
+            from moodle_mcp.oauth import ClientProxy
 
             profile = getattr(self.config, "TAU_PROFILE", None) or "default"
             # Map default or full username to primary Moodle profile (e.g. 'yuval') if matching
@@ -152,7 +153,8 @@ class PluginManager:
                     pass
 
             auth = MoodleAuth(profile=profile)
-            client = MoodleClient(auth=auth, profile=profile)
+            base_client = MoodleClient(auth=auth, profile=profile)
+            client = ClientProxy(base_client)
             panopto = PanoptoManager(moodle_client=client)
 
             # Register all tools from moodle_mcp into our central server
@@ -160,6 +162,7 @@ class PluginManager:
 
             # Register Moodle Resources onto our server
             self._register_moodle_resources(client)
+            self._register_moodle_prompts()
 
             if "moodle" not in self.loaded_plugins:
                 self.loaded_plugins.append("moodle")
@@ -172,6 +175,11 @@ class PluginManager:
     def _register_moodle_resources(self, client: Any) -> None:
         """Registers moodle:// resources onto the central server."""
         import json
+
+        @self.server.resource("moodle://profile")
+        def get_profile_resource() -> str:
+            info = client.get_site_info()
+            return json.dumps(info, indent=2, ensure_ascii=False)
 
         @self.server.resource("moodle://courses")
         def get_courses_resource() -> str:
@@ -188,7 +196,57 @@ class PluginManager:
             summary = client.get_grades_summary()
             return json.dumps(summary, indent=2, ensure_ascii=False)
 
-        @self.server.resource("moodle://dashboard")
-        def get_dashboard_resource() -> str:
-            dash = client.get_dashboard()
-            return json.dumps(dash, indent=2, ensure_ascii=False)
+        @self.server.resource("moodle://quizzes")
+        def get_quizzes_resource() -> str:
+            quizzes = client.get_quizzes()
+            return json.dumps(quizzes, indent=2, ensure_ascii=False)
+
+        @self.server.resource("moodle://calendar")
+        def get_calendar_resource() -> str:
+            events = client.get_calendar_events(days_ahead=14)
+            return json.dumps(events, indent=2, ensure_ascii=False)
+
+        @self.server.resource("moodle://announcements")
+        def get_announcements_resource() -> str:
+            announcements = client.get_course_announcements()
+            return json.dumps(announcements, indent=2, ensure_ascii=False)
+
+        @self.server.resource("moodle://saved")
+        def get_saved_data_resource() -> str:
+            items = client.data_store.list_keys()
+            return json.dumps(items, indent=2, ensure_ascii=False)
+
+        @self.server.resource("moodle://cache")
+        def get_cache_status_resource() -> str:
+            stats = client.cache.get_stats()
+            return json.dumps(stats, indent=2, ensure_ascii=False)
+
+    def _register_moodle_prompts(self) -> None:
+        """Registers Moodle prompt templates onto the central server."""
+        @self.server.prompt()
+        def study_briefing() -> str:
+            """Prompt template to summarize enrolled courses, upcoming deadlines, and study priorities."""
+            return (
+                "You are an academic study assistant connected to my university Moodle account. "
+                "Please call `moodle_get_enrolled_courses` and `moodle_get_upcoming_assignments` "
+                "to summarize what courses I am taking this semester, list my upcoming deadlines in chronological order, "
+                "and suggest study priorities for the coming days."
+            )
+
+        @self.server.prompt()
+        def assignment_analysis(assignment_id: int) -> str:
+            """Prompt template to deeply analyze a specific assignment's requirements and guide preparation."""
+            return (
+                f"Please inspect assignment {assignment_id} using `moodle_get_assignment_status`. "
+                "If there are any instruction attachments, use `moodle_read_file_content` to read them, "
+                "and provide a clear breakdown of requirements, rubric, deadline, and recommended steps to complete it."
+            )
+
+        @self.server.prompt()
+        def exam_preparation(course_id: int) -> str:
+            """Prompt template to organize revision, past materials, and announcements for an upcoming exam."""
+            return (
+                f"Please inspect course {course_id} using `moodle_get_course_contents`, "
+                "`moodle_get_quizzes`, and `moodle_get_course_announcements`. "
+                "Identify exam dates, relevant lecture slides/recitations, and summarize key topics to study."
+            )

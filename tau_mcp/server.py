@@ -116,8 +116,11 @@ from tau_mcp.core.auth import TAUAuthManager
 from tau_mcp.core.portal import TAUPortalClient
 from tau_mcp.core.catalog import TAUCourseCatalogClient
 from tau_mcp.core.room_finder import RoomFinder
-from tau_mcp.plugin_manager import PluginManager
+from tau_mcp.plugin_manager import PluginManager, ensure_moodle_mcp_imported
 from tau_mcp.tools import register_all_tau_tools
+
+# Ensure moodle_mcp is mapped dynamically on module import
+ensure_moodle_mcp_imported()
 
 logger = logging.getLogger("tau_mcp")
 
@@ -240,22 +243,37 @@ def run_streamable_http_server(server: Any, host: str = "0.0.0.0", port: int = 8
     from contextlib import AsyncExitStack, asynccontextmanager
 
     try:
-        from mcp.server.streamable_http import TransportSecuritySettings, StreamableHTTPASGIApp
+        from mcp.server.transport_security import TransportSecuritySettings
     except ImportError:
         try:
-            from mcp.server.fastmcp.streamable_http import TransportSecuritySettings, StreamableHTTPASGIApp
+            from mcp.server.streamable_http import TransportSecuritySettings
         except ImportError:
             TransportSecuritySettings = None
+
+    try:
+        from mcp.server.streamable_http_manager import StreamableHTTPASGIApp
+    except ImportError:
+        try:
+            from mcp.server.streamable_http import StreamableHTTPASGIApp
+        except ImportError:
             StreamableHTTPASGIApp = None
 
     security = None
     if TransportSecuritySettings:
-        security = TransportSecuritySettings(
-            allowed_origins=["*"],
-            allowed_hosts=["*"],
-            require_session_id=False,
-            enable_csrf_protection=False
-        )
+        try:
+            security = TransportSecuritySettings(
+                enable_dns_rebinding_protection=False,
+                allowed_hosts=["*"],
+                allowed_origins=["*"]
+            )
+        except Exception:
+            try:
+                security = TransportSecuritySettings(
+                    allowed_origins=["*"],
+                    allowed_hosts=["*"]
+                )
+            except Exception:
+                pass
 
     async def root_info(req: Any) -> JSONResponse:
         return JSONResponse({
@@ -299,9 +317,12 @@ def run_streamable_http_server(server: Any, host: str = "0.0.0.0", port: int = 8
     except Exception as e:
         logger.debug(f"OAuth 2.1 routes not mounted: {e}")
 
-    routes.append(Mount("/", mcp_app))
-
     session_mgr = getattr(server._lowlevel_server, "_session_manager", None)
+    if session_mgr and StreamableHTTPASGIApp:
+        routes.append(Route("/mcp", endpoint=StreamableHTTPASGIApp(session_mgr), methods=["POST"]))
+        routes.append(Route("/", endpoint=StreamableHTTPASGIApp(session_mgr), methods=["POST"]))
+
+    routes.append(Mount("/", mcp_app))
 
     @asynccontextmanager
     async def lifespan(app: Starlette):
@@ -312,7 +333,7 @@ def run_streamable_http_server(server: Any, host: str = "0.0.0.0", port: int = 8
 
     app = Starlette(routes=routes, lifespan=lifespan)
     if token_manager:
-        require_auth = os.getenv("TAU_REQUIRE_AUTH", os.getenv("MOODLE_REQUIRE_AUTH", "0")) in ("1", "true", "True")
+        require_auth = os.getenv("TAU_REQUIRE_AUTH", os.getenv("MOODLE_REQUIRE_AUTH", "1")) in ("1", "true", "True")
         app.add_middleware(
             BearerAuthMiddleware,
             token_manager=token_manager,
