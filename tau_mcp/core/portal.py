@@ -31,7 +31,10 @@ class TAUPortalClient:
         self.session = requests.Session()
         self.cookies: Dict[str, str] = {}
         self.csrf_token: str = ""
-        self._load_session()
+        # Load cached session if available; avoid blocking server startup with automated login
+        if self.auth_manager.load_cached_session():
+            self.cookies = self.auth_manager.cookies
+            self.csrf_token = self.auth_manager.csrf_token
 
     def _load_session(self, force_refresh: bool = False):
         self.cookies, self.csrf_token = self.auth_manager.get_authenticated_session(force_refresh=force_refresh)
@@ -48,6 +51,8 @@ class TAUPortalClient:
         Sends an authenticated POST request to an OutSystems screen service endpoint.
         Automatically handles session refresh on expiration.
         """
+        if not self.cookies or not self.csrf_token:
+            self._load_session(force_refresh=False)
         v_name = view_name or kwargs.get("viewName", "")
         url = f"{self.BASE_URL}/{path}"
         headers = {

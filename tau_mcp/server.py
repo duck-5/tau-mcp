@@ -129,9 +129,11 @@ def create_server(profile: Optional[str] = None, include_moodle: bool = True) ->
     Initializes and configures the TAU MCP server.
     Loads core TAU tools and dynamically mounts plugins (such as Moodle).
     """
-    prof_name = profile or config.TAU_PROFILE or "default"
+    storage_profile = profile or config.TAU_PROFILE or "default"
+    server_name = f"tau_mcp_{profile}" if profile else "tau_mcp"
     server = MCPServer(
-        name=f"tau_mcp_{prof_name}" if prof_name != "default" else "tau_mcp"
+        name=server_name,
+        version="1.0.0"
     )
 
     # Advertise list_changed=True in capabilities so clients (e.g. Gemini) can refresh tool lists
@@ -202,8 +204,8 @@ def create_server(profile: Optional[str] = None, include_moodle: bool = True) ->
         server.add_tool = add_tool_with_annotations
 
     # Core components
-    cache = CacheManager(profile=prof_name)
-    auth_manager = TAUAuthManager(profile=prof_name)
+    cache = CacheManager(profile=storage_profile)
+    auth_manager = TAUAuthManager(profile=storage_profile)
     portal = TAUPortalClient(auth_manager=auth_manager, cache=cache)
     catalog = TAUCourseCatalogClient(cache=cache)
     room_finder = RoomFinder(catalog_client=catalog, portal_client=portal)
