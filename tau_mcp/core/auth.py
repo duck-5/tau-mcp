@@ -61,27 +61,29 @@ class TAUAuthManager:
         self.cookies: Dict[str, str] = {}
         self.csrf_token: str = ""
 
-    def get_authenticated_session(self, force_refresh: bool = False) -> Tuple[Dict[str, str], str]:
+    def get_authenticated_session(self, force_refresh: bool = False, min_timestamp: float = 0.0) -> Tuple[Dict[str, str], str]:
         """
         Returns (cookies_dict, csrf_token).
         Thread-safe: guarantees only one Playwright instance authenticates at a time.
-        If another thread recently refreshed the session, reuses the fresh disk cache.
+        If force_refresh is requested, only reuses the disk cache if another worker already
+        refreshed it after min_timestamp. Otherwise, invalidates the stale session and logs in.
         """
         with _PORTAL_AUTH_LOCK:
-            now = time.time()
             if force_refresh:
-                # If another worker thread already refreshed the session file within the last 60 seconds, reuse it!
-                if self.session_file.exists():
+                if self.session_file.exists() and min_timestamp > 0:
                     try:
                         mtime = self.session_file.stat().st_mtime
-                        if (now - mtime < 60) and self.load_cached_session():
+                        if mtime > min_timestamp and self.load_cached_session():
                             logger.info(
-                                f"Portal session cache was freshly renewed ({now - mtime:.1f}s ago). "
-                                "Reusing existing session without re-launching Playwright."
+                                "Portal session was freshly renewed by another worker while waiting for lock. "
+                                "Reusing new session without re-launching Playwright."
                             )
                             return self.cookies, self.csrf_token
                     except Exception:
                         pass
+
+                self.invalidate_session()
+                return self.login()
             else:
                 if self.load_cached_session():
                     return self.cookies, self.csrf_token

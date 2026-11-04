@@ -64,8 +64,11 @@ class TAUPortalClient:
             self.cookies = self.auth_manager.cookies
             self.csrf_token = self.auth_manager.csrf_token
 
-    def _load_session(self, force_refresh: bool = False):
-        self.cookies, self.csrf_token = self.auth_manager.get_authenticated_session(force_refresh=force_refresh)
+    def _load_session(self, force_refresh: bool = False, min_timestamp: float = 0.0):
+        self.cookies, self.csrf_token = self.auth_manager.get_authenticated_session(
+            force_refresh=force_refresh,
+            min_timestamp=min_timestamp
+        )
 
     def _call_screenservice(
         self,
@@ -124,16 +127,11 @@ class TAUPortalClient:
                     pass
             return False
 
-        # Handle expired session with re-auth throttling
+        # Handle expired session with re-auth synchronization
         if _needs_reauth(resp):
-            now = time.time()
-            if (now - self._last_reauth_time) < 30:
-                logger.info("Session rejected shortly after re-auth; reloading latest cached session without launching new browser...")
-                self._load_session(force_refresh=False)
-            else:
-                logger.info("Portal session expired or unauthorized. Re-authenticating...")
-                self._last_reauth_time = now
-                self._load_session(force_refresh=True)
+            failed_at = time.time()
+            logger.info("Portal session expired or rejected. Re-authenticating...")
+            self._load_session(force_refresh=True, min_timestamp=failed_at)
 
             headers["x-csrftoken"] = self.csrf_token
             resp = self.session.post(url, headers=headers, cookies=self.cookies, json=payload, timeout=20)

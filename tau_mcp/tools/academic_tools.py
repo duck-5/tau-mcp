@@ -6,24 +6,40 @@ from tau_mcp.core.portal import TAUPortalClient
 def register_academic_tools(server: Any, portal: TAUPortalClient) -> None:
     @server.tool(
         name="tau_get_my_grades",
-        description="Get the student's OFFICIAL university transcripts, semester grades, Moed A/B final grades, and credit points from the central TAU Student Portal (my.tau.ac.il). For active in-course assignment or quiz grades inside courses, use Moodle tools."
+        description=(
+            "Get the student's OFFICIAL university transcripts, semester grades, Moed A/B final grades, "
+            "credit points, and cumulative degree GPA summary from the central TAU Student Portal (my.tau.ac.il)."
+        )
     )
-    def tau_get_my_grades() -> List[Dict[str, Any]]:
+    def tau_get_my_grades() -> Dict[str, Any]:
         grades = portal.get_grades()
-        return [
-            {
-                "course_number": g.course_number,
-                "course_name": g.course_name,
-                "final_grade": g.final_grade,
-                "weight": g.weight,
-                "year_he": g.year_he,
-                "semester_he": g.semester_he,
-                "moed": g.moed,
-                "is_finished": g.is_finished,
-                "remarks": g.remarks
-            }
-            for g in grades
-        ]
+        gpa_stats = portal.get_gpa_stats()
+        return {
+            "gpa_summary": [
+                {
+                    "program": s.program_desc,
+                    "program_en": s.program_desc_en,
+                    "avg_grade": s.avg_grade,
+                    "total_hours": s.total_hours,
+                    "final_weight": s.final_weight
+                }
+                for s in gpa_stats
+            ],
+            "grades": [
+                {
+                    "course_number": g.course_number,
+                    "course_name": g.course_name,
+                    "final_grade": g.final_grade,
+                    "weight": g.weight,
+                    "year_he": g.year_he,
+                    "semester_he": g.semester_he,
+                    "moed": g.moed,
+                    "is_finished": g.is_finished,
+                    "remarks": g.remarks
+                }
+                for g in grades
+            ]
+        }
 
     @server.tool(
         name="tau_get_my_gpa",

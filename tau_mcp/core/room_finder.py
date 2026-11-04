@@ -64,12 +64,19 @@ class RoomFinder:
             day_clean = day.strip().lower()
             day = DAY_MAP.get(day_clean, day.strip())
 
-        # 2. Resolve course number
+        # 2. Resolve course number & group from input
         course_str = course.strip()
         course_number = None
 
         digits = re.sub(r"[^\d]", "", course_str)
-        if len(digits) >= 6:
+        if len(digits) >= 8:
+            course_number = digits[:8]
+            # If input is a 10-digit Moodle course ID (e.g. 0321210299 or 0321210201) and group not passed
+            if not group and len(digits) >= 10:
+                extracted_group = digits[8:10]
+                if extracted_group != "99":  # '99' in Moodle is the master course shell for all groups
+                    group = extracted_group
+        elif len(digits) >= 6:
             course_number = digits.zfill(8)
         else:
             # Search catalog by name

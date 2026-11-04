@@ -18,6 +18,27 @@ from tau_mcp.core.models import CourseInstance, CourseSession
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 logger = logging.getLogger("tau_mcp.catalog")
 
+# Common student colloquial course names mapped to official catalog course search terms
+HEBREW_COURSE_ALIASES = {
+    "אינפי": ["חשבון", 'חדו"א'],
+    "אינפי 1": ["חשבון דיפרנציאלי ואינטגרלי 1", 'חדו"א 1'],
+    "אינפי 2": ["חשבון דיפרנציאלי ואינטגרלי 2", 'חדו"א 2'],
+    "אינפי1": ["חשבון דיפרנציאלי ואינטגרלי 1", 'חדו"א 1'],
+    "אינפי2": ["חשבון דיפרנציאלי ואינטגרלי 2", 'חדו"א 2'],
+    "חדוא": ['חדו"א', "חשבון"],
+    "חדוא 1": ['חדו"א 1', "חשבון דיפרנציאלי ואינטגרלי 1"],
+    "חדוא 2": ['חדו"א 2', "חשבון דיפרנציאלי ואינטגרלי 2"],
+    "חדוא1": ['חדו"א 1'],
+    "חדוא2": ['חדו"א 2'],
+    "לינארית": ["ליניארית", "אלגברה ליניארית"],
+    "לינארית 1": ["אלגברה ליניארית 1"],
+    "לינארית 2": ["אלגברה ליניארית 2"],
+    "בדידה": ["מתמטיקה בדידה"],
+    "אלגו": ["אלגוריתמים"],
+    "מבני": ["מבני נתונים"],
+    "מודלים": ["מודלים חישוביים"],
+}
+
 class TAUCourseCatalogClient:
     SEARCH_PAGE_URL = "https://www.ims.tau.ac.il/tal/kr/search_p.aspx"
     SEARCH_ACTION_URL = "https://www.ims.tau.ac.il/tal/kr/Search_L.aspx"
@@ -68,26 +89,57 @@ class TAUCourseCatalogClient:
         lecturer_name: str = "",
         year: str = "2026"
     ) -> List[CourseInstance]:
-        """Searches courses by title or lecturer name."""
-        cache_key = f"catalog:search:{course_name}:{lecturer_name}:{year}"
+        """Searches courses by title or lecturer name with Hebrew nickname/alias expansion."""
+        clean_name = course_name.strip()
+        cache_key = f"catalog:search:{clean_name}:{lecturer_name.strip()}:{year}"
         cached = self.cache.get(cache_key, max_age=3600)
         if cached is not None:
             return cached
 
         self._ensure_session()
-        resp = self.session.post(
-            self.SEARCH_ACTION_URL,
-            data={
-                "txtShemKurs": course_name,
-                "txtShemMore": lecturer_name,
-                "lstYear1": str(year),
-                "search1": "חיפוש"
-            },
-            headers={"Referer": self.SEARCH_PAGE_URL},
-            verify=False,
-            timeout=15
-        )
-        instances = self._parse_search_results(resp.text, "", year)
+
+        def _do_query(q_name: str) -> List[CourseInstance]:
+            try:
+                resp = self.session.post(
+                    self.SEARCH_ACTION_URL,
+                    data={
+                        "txtShemKurs": q_name,
+                        "txtShemMore": lecturer_name.strip(),
+                        "lstYear1": str(year),
+                        "search1": "חיפוש"
+                    },
+                    headers={
+                        "Referer": self.SEARCH_PAGE_URL,
+                        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
+                    },
+                    verify=False,
+                    timeout=15
+                )
+                return self._parse_search_results(resp.text, "", year)
+            except Exception as e:
+                logger.warning(f"Catalog search query failed for '{q_name}': {e}")
+                return []
+
+        # 1. Primary search
+        instances = _do_query(clean_name)
+
+        # 2. If no results found, expand with colloquial Hebrew course aliases
+        if not instances and clean_name:
+            candidates = HEBREW_COURSE_ALIASES.get(clean_name.lower())
+            if not candidates:
+                # Check for partial key match
+                for alias_key, alias_targets in HEBREW_COURSE_ALIASES.items():
+                    if alias_key in clean_name.lower():
+                        candidates = alias_targets
+                        break
+
+            if candidates:
+                for candidate in candidates:
+                    expanded_results = _do_query(candidate)
+                    if expanded_results:
+                        instances.extend(expanded_results)
+                        break
+
         self.cache.set(cache_key, instances)
         return instances
 
