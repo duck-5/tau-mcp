@@ -6,6 +6,7 @@ Communicates via OutSystems Reactive screen services.
 import json
 import logging
 import datetime
+import time
 import requests
 from typing import List, Dict, Optional, Any
 
@@ -23,7 +24,33 @@ logger = logging.getLogger("tau_mcp.portal")
 
 class TAUPortalClient:
     BASE_URL = "https://my.tau.ac.il/TAU_Student/screenservices"
-    MODULE_VERSION = "Yx_Lnh4Gkv3UQSOjVN7SHw"
+    MODULE_INFO_URL = "https://my.tau.ac.il/TAU_Student/moduleservices/moduleinfo"
+    FALLBACK_MODULE_VERSION = "K+RRJ1D3KpXBT4huKE1+3g"
+    _cached_module_version: Optional[str] = None
+    _module_version_timestamp: float = 0.0
+
+    @classmethod
+    def get_module_version(cls) -> str:
+        """Fetches active OutSystems module version token, caching it for 1 hour."""
+        now = time.time()
+        if cls._cached_module_version and (now - cls._module_version_timestamp < 3600):
+            return cls._cached_module_version
+        try:
+            resp = requests.get(cls.MODULE_INFO_URL, timeout=10)
+            if resp.status_code == 200:
+                data = resp.json()
+                token = data.get("manifest", {}).get("versionToken")
+                if token:
+                    cls._cached_module_version = token
+                    cls._module_version_timestamp = now
+                    logger.debug(f"Discovered OutSystems module version token: {token}")
+                    return token
+        except Exception as e:
+            logger.warning(f"Failed fetching OutSystems module version, using fallback: {e}")
+
+        cls._cached_module_version = cls.FALLBACK_MODULE_VERSION
+        cls._module_version_timestamp = now
+        return cls._cached_module_version
 
     def __init__(self, auth_manager: Optional[TAUAuthManager] = None, cache: Optional[CacheManager] = None):
         self.auth_manager = auth_manager or TAUAuthManager()
@@ -31,6 +58,7 @@ class TAUPortalClient:
         self.session = requests.Session()
         self.cookies: Dict[str, str] = {}
         self.csrf_token: str = ""
+        self._last_reauth_time: float = 0.0
         # Load cached session if available; avoid blocking server startup with automated login
         if self.auth_manager.load_cached_session():
             self.cookies = self.auth_manager.cookies
@@ -66,7 +94,7 @@ class TAUPortalClient:
 
         payload = {
             "versionInfo": {
-                "moduleVersion": self.MODULE_VERSION,
+                "moduleVersion": self.get_module_version(),
                 "apiVersion": api_version
             },
             "viewName": v_name,
@@ -96,10 +124,17 @@ class TAUPortalClient:
                     pass
             return False
 
-        # Handle expired session
+        # Handle expired session with re-auth throttling
         if _needs_reauth(resp):
-            logger.info("Portal session expired or unauthorized. Re-authenticating...")
-            self._load_session(force_refresh=True)
+            now = time.time()
+            if (now - self._last_reauth_time) < 30:
+                logger.info("Session rejected shortly after re-auth; reloading latest cached session without launching new browser...")
+                self._load_session(force_refresh=False)
+            else:
+                logger.info("Portal session expired or unauthorized. Re-authenticating...")
+                self._last_reauth_time = now
+                self._load_session(force_refresh=True)
+
             headers["x-csrftoken"] = self.csrf_token
             resp = self.session.post(url, headers=headers, cookies=self.cookies, json=payload, timeout=20)
 

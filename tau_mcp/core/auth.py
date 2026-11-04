@@ -10,6 +10,7 @@ import os
 import json
 import time
 import logging
+import threading
 import urllib.parse
 from pathlib import Path
 from typing import Dict, Tuple, Optional, Any
@@ -25,6 +26,9 @@ from tau_mcp.config import (
 )
 
 logger = logging.getLogger("tau_mcp.auth")
+
+# Process-level lock to prevent concurrent Playwright browser logins that invalidate sessions
+_PORTAL_AUTH_LOCK = threading.Lock()
 
 class TAUAuthError(Exception):
     """Raised when authentication with TAU portal fails."""
@@ -60,12 +64,29 @@ class TAUAuthManager:
     def get_authenticated_session(self, force_refresh: bool = False) -> Tuple[Dict[str, str], str]:
         """
         Returns (cookies_dict, csrf_token).
-        Loads cached session if fresh (<30 min old), otherwise performs automated login.
+        Thread-safe: guarantees only one Playwright instance authenticates at a time.
+        If another thread recently refreshed the session, reuses the fresh disk cache.
         """
-        if not force_refresh and self.load_cached_session():
-            return self.cookies, self.csrf_token
+        with _PORTAL_AUTH_LOCK:
+            now = time.time()
+            if force_refresh:
+                # If another worker thread already refreshed the session file within the last 60 seconds, reuse it!
+                if self.session_file.exists():
+                    try:
+                        mtime = self.session_file.stat().st_mtime
+                        if (now - mtime < 60) and self.load_cached_session():
+                            logger.info(
+                                f"Portal session cache was freshly renewed ({now - mtime:.1f}s ago). "
+                                "Reusing existing session without re-launching Playwright."
+                            )
+                            return self.cookies, self.csrf_token
+                    except Exception:
+                        pass
+            else:
+                if self.load_cached_session():
+                    return self.cookies, self.csrf_token
 
-        return self.login()
+            return self.login()
 
     def load_cached_session(self) -> bool:
         """Loads session cookies and CSRF token from disk if valid."""
