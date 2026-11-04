@@ -178,9 +178,12 @@ def create_server(profile: Optional[str] = None, include_moodle: bool = True) ->
             def make_error_payload(exc: Exception) -> Any:
                 err_text = f"Error in {fn_name}: {exc}"
                 logger.error(err_text)
-                if ret_ann is not None and (ret_ann is dict or "Dict" in str(ret_ann)):
+                ret_str = str(ret_ann) if ret_ann is not None else ""
+                if ret_ann is list or "List" in ret_str:
+                    return [{"error": err_text, "tool": fn_name}]
+                elif ret_ann is dict or "Dict" in ret_str:
                     return {"error": err_text, "tool": fn_name}
-                elif ret_ann is not None and (ret_ann is str or "str" in str(ret_ann)):
+                elif ret_ann is str or "str" in ret_str:
                     return err_text
                 return [{"error": err_text, "tool": fn_name}]
 
