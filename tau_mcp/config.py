@@ -52,6 +52,7 @@ def get_env_or_dotenv(key: str, fallback_keys: Optional[list] = None, default: s
 TAU_USERNAME = get_env_or_dotenv("TAU_USERNAME", ["MOODLE_USERNAME", "USERNAME"])
 TAU_ID = get_env_or_dotenv("TAU_ID", ["MOODLE_STUDENT_ID", "ID", "STUDENT_ID"])
 TAU_PASSWORD = get_env_or_dotenv("TAU_PASSWORD", ["MOODLE_PASSWORD", "PASSWORD"])
+TAU_PROFILE_ENV = get_env_or_dotenv("TAU_PROFILE", ["MOODLE_PROFILE", "PROFILE"])
 
 # Propagate credentials to os.environ so moodle_mcp sub-components inherit them
 if TAU_USERNAME and not os.environ.get("MOODLE_USERNAME"):
@@ -60,6 +61,8 @@ if TAU_PASSWORD and not os.environ.get("MOODLE_PASSWORD"):
     os.environ["MOODLE_PASSWORD"] = TAU_PASSWORD
 if TAU_ID and not os.environ.get("MOODLE_STUDENT_ID"):
     os.environ["MOODLE_STUDENT_ID"] = TAU_ID
+if TAU_PROFILE_ENV and not os.environ.get("MOODLE_PROFILE"):
+    os.environ["MOODLE_PROFILE"] = TAU_PROFILE_ENV
 
 # Portals & Catalog URLs
 PORTAL_URL = os.getenv("TAU_PORTAL_URL", "https://my.tau.ac.il/TAU_Student/").rstrip("/")
@@ -74,7 +77,7 @@ TAU_STORAGE_DIR = Path(os.getenv("TAU_STORAGE_DIR", str(Path.home() / ".tau_mcp"
 PROFILES_DIR = TAU_STORAGE_DIR / "profiles"
 
 # Active Profile Name
-TAU_PROFILE = os.getenv("TAU_PROFILE", TAU_USERNAME or "default").strip() or "default"
+TAU_PROFILE = (TAU_PROFILE_ENV or TAU_USERNAME or "default").strip() or "default"
 
 def sanitize_profile_name(profile: Optional[str] = None) -> str:
     """Sanitizes a profile or username into a safe directory name."""
