@@ -24,10 +24,3 @@ def register_message_tools(server: Any, portal: TAUPortalClient) -> None:
             }
             for m in msgs
         ]
-
-    @server.tool(
-        name="tau_get_user_profile",
-        description="Get the authenticated student's personal information and enrolled academic degree details."
-    )
-    def tau_get_user_profile() -> Dict[str, Any]:
-        return portal.get_user_profile()

@@ -42,23 +42,6 @@ def register_academic_tools(server: Any, portal: TAUPortalClient) -> None:
         }
 
     @server.tool(
-        name="tau_get_my_gpa",
-        description="Get the authenticated student's cumulative grade point average (GPA) and total credit points per degree program/major."
-    )
-    def tau_get_my_gpa() -> List[Dict[str, Any]]:
-        stats = portal.get_gpa_stats()
-        return [
-            {
-                "program": s.program_desc,
-                "program_en": s.program_desc_en,
-                "avg_grade": s.avg_grade,
-                "total_hours": s.total_hours,
-                "final_weight": s.final_weight
-            }
-            for s in stats
-        ]
-
-    @server.tool(
         name="tau_get_my_exams",
         description="Get the authenticated student's exam dates (Moed A & Moed B), start times, exam grades, and notebook scan statuses."
     )
