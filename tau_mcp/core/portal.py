@@ -310,13 +310,14 @@ class TAUPortalClient:
         # 2. Earlier / Historical messages (where room changes are published)
         if include_earlier:
             try:
+                lookback_date = (datetime.date.today() - datetime.timedelta(days=180)).strftime("%Y-%m-%d")
                 data_earlier = self._call_screenservice(
                     path="TAU_Student/Blocks/EarlierMessagesBlock/DataActionGetEarlierMessageData",
                     api_version="ZOvyt3NRI2A7Y5O8OC83Wg",
                     view_name="StudentMainFlow.Messages",
                     screen_data={
                         "variables": {
-                            "FromDate": "2026-01-01",
+                            "FromDate": lookback_date,
                             "HideExpiredMessages": False
                         }
                     }
