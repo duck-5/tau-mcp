@@ -241,7 +241,7 @@ class TAUPortalClient:
             screen_data={
                 "variables": {
                     "FromDate": from_date,
-                    "FromDashboard": True
+                    "FromDashboard": False
                 }
             }
         )

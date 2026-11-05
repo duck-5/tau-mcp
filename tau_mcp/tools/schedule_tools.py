@@ -147,6 +147,7 @@ def register_schedule_tools(server: Any, portal: TAUPortalClient) -> None:
                 "day_of_week": first_day["day_of_week"],
                 "day_of_week_en": first_day["day_of_week_en"],
                 "total_classes": first_day["total_classes"],
+                "days": days_list,
                 "classes": first_day["classes"],
                 "room_change_alerts": first_day["room_change_alerts"],
                 "assignments_due": first_day["assignments_due"]
